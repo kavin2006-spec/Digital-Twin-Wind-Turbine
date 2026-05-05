@@ -13,3 +13,7 @@ outputs/plots/
 
 # Dev files
 test.py
+check_signal.py
+diagnose.py
+explore_lbf.py
+find_window.py
