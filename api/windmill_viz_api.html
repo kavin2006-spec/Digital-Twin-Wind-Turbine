@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wind Turbine Digital Twin — 3D Visualization</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #0a0f1a; color: #e2e8f0; font-family: system-ui, sans-serif; overflow: hidden; }
+#canvas-container { position: fixed; inset: 0; }
+#ui { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+
+#topbar {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 20px;
+  background: rgba(10,15,26,0.88);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  pointer-events: auto;
+}
+#topbar h1 { font-size: 14px; font-weight: 500; color: #94a3b8; letter-spacing: 0.05em; text-transform: uppercase; }
+#run-info { font-size: 13px; color: #64748b; }
+#run-info span { color: #e2e8f0; font-weight: 500; }
+#model-tag {
+  font-size: 11px; color: #38bdf8;
+  background: rgba(56,189,248,0.1);
+  border: 1px solid rgba(56,189,248,0.2);
+  border-radius: 5px; padding: 3px 8px;
+}
+
+#metrics {
+  position: absolute; top: 60px; left: 16px;
+  width: 200px; display: flex; flex-direction: column; gap: 8px;
+  pointer-events: auto;
+}
+.metric-card {
+  background: rgba(15,23,42,0.92);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px; padding: 10px 14px;
+}
+.metric-label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.metric-value { font-size: 22px; font-weight: 600; }
+.metric-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+.metric-bar-track { height: 3px; background: rgba(255,255,255,0.07); border-radius: 2px; margin-top: 6px; }
+.metric-bar-fill { height: 100%; border-radius: 2px; transition: width 0.35s ease; }
+
+#right-panel {
+  position: absolute; top: 60px; right: 16px;
+  width: 224px; display: flex; flex-direction: column; gap: 10px;
+  pointer-events: auto;
+}
+.panel-card {
+  background: rgba(15,23,42,0.92);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px; padding: 12px 14px;
+}
+.panel-title { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+
+#run-controls { display: flex; gap: 5px; flex-wrap: wrap; }
+.run-btn {
+  border: 1px solid rgba(255,255,255,0.09);
+  color: #94a3b8; border-radius: 5px;
+  padding: 4px 8px; font-size: 11px; cursor: pointer;
+  transition: all 0.15s; min-width: 28px; text-align: center;
+}
+.run-btn:hover { border-color: rgba(255,255,255,0.2); color: #e2e8f0; }
+.run-btn.active { border-color: rgba(56,189,248,0.5); color: #38bdf8; }
+
+#speed-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+#speed-row label { font-size: 11px; color: #64748b; white-space: nowrap; }
+#speed-slider { flex: 1; accent-color: #38bdf8; }
+#speed-val { font-size: 11px; color: #94a3b8; min-width: 22px; text-align: right; }
+
+#mini-chart { width: 100%; height: 78px; display: block; }
+
+#legend { display: flex; flex-direction: column; gap: 5px; }
+.legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8; }
+.legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+#run-stats { font-size: 12px; color: #94a3b8; line-height: 1.9; }
+#run-stats b { color: #e2e8f0; }
+
+#mc-stats { font-size: 12px; color: #94a3b8; line-height: 1.9; }
+#mc-stats b { color: #e2e8f0; }
+
+#bottombar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 10px 20px;
+  background: rgba(10,15,26,0.88);
+  border-top: 1px solid rgba(255,255,255,0.07);
+  display: flex; align-items: center; gap: 12px;
+  pointer-events: auto;
+}
+#timeline-wrap { flex: 1; position: relative; height: 28px; cursor: pointer; }
+#timeline-bg {
+  position: absolute; top: 50%; left: 0; right: 0;
+  height: 4px; transform: translateY(-50%);
+  background: rgba(255,255,255,0.07); border-radius: 2px;
+}
+#timeline-fill {
+  position: absolute; top: 50%; left: 0;
+  height: 4px; transform: translateY(-50%);
+  background: #38bdf8; border-radius: 2px; width: 0%;
+}
+#fault-overlay {
+  position: absolute; top: 50%; left: 0; right: 0;
+  height: 4px; transform: translateY(-50%);
+  pointer-events: none;
+}
+#timeline-cursor {
+  position: absolute; top: 50%; width: 12px; height: 12px;
+  background: #38bdf8; border-radius: 50%;
+  transform: translate(-50%, -50%); left: 0%;
+  box-shadow: 0 0 6px rgba(56,189,248,0.5);
+}
+#step-label { font-size: 12px; color: #64748b; white-space: nowrap; min-width: 100px; text-align: right; }
+#play-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(56,189,248,0.12);
+  border: 1px solid rgba(56,189,248,0.3);
+  color: #38bdf8; cursor: pointer; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+#play-btn:hover { background: rgba(56,189,248,0.22); }
+
+#fault-banner {
+  position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+  background: rgba(239,68,68,0.13);
+  border: 1px solid rgba(239,68,68,0.35);
+  color: #f87171; border-radius: 8px;
+  padding: 6px 18px; font-size: 12px; font-weight: 500;
+  opacity: 0; transition: opacity 0.3s;
+  pointer-events: none; white-space: nowrap;
+}
+#fault-banner.visible { opacity: 1; }
+
+#loading-screen {
+  position: fixed; inset: 0; background: #0a0f1a;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 1000; gap: 20px;
+}
+#loading-screen h2 { font-size: 16px; font-weight: 500; color: #94a3b8; }
+#loading-bar-track {
+  width: 320px; height: 3px;
+  background: rgba(255,255,255,0.07); border-radius: 2px;
+}
+#loading-bar-fill {
+  height: 100%; background: #38bdf8; border-radius: 2px;
+  width: 0%; transition: width 0.3s ease;
+}
+#loading-msg { font-size: 13px; color: #64748b; }
+</style>
+</head>
+<body>
+
+<div id="loading-screen">
+  <h2>Wind Turbine Digital Twin</h2>
+  <div id="loading-bar-track"><div id="loading-bar-fill"></div></div>
+  <div id="loading-msg">Connecting to simulation server...</div>
+</div>
+
+<div id="canvas-container"></div>
+
+<div id="ui" style="display:none">
+  <div id="topbar">
+    <h1>Wind Turbine Digital Twin</h1>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span id="model-tag">Multi-scale VAE · 30s + 120s</span>
+      <div id="run-info">Run <span id="cur-run">1</span> of <span id="total-runs">50</span> &nbsp;·&nbsp; Step <span id="cur-step">0</span></div>
+    </div>
+  </div>
+
+  <div id="metrics">
+    <div class="metric-card">
+      <div class="metric-label">Wind speed</div>
+      <div class="metric-value" id="m-wind" style="color:#38bdf8">—</div>
+      <div class="metric-sub">m/s</div>
+      <div class="metric-bar-track"><div class="metric-bar-fill" id="bar-wind" style="background:#38bdf8;width:0%"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Power output</div>
+      <div class="metric-value" id="m-power" style="color:#34d399">—</div>
+      <div class="metric-sub">kW actual</div>
+      <div class="metric-bar-track"><div class="metric-bar-fill" id="bar-power" style="background:#34d399;width:0%"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Efficiency</div>
+      <div class="metric-value" id="m-eff" style="color:#a78bfa">—</div>
+      <div class="metric-sub">actual / expected</div>
+      <div class="metric-bar-track"><div class="metric-bar-fill" id="bar-eff" style="background:#a78bfa;width:0%"></div></div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Anomaly score</div>
+      <div class="metric-value" id="m-score" style="color:#fb923c">—</div>
+      <div class="metric-sub">VAE ensemble</div>
+      <div class="metric-bar-track"><div class="metric-bar-fill" id="bar-score" style="background:#fb923c;width:0%"></div></div>
+    </div>
+  </div>
+
+  <div id="right-panel">
+    <div class="panel-card">
+      <div class="panel-title">Select run</div>
+      <div id="run-controls"></div>
+      <div id="speed-row">
+        <label>Speed</label>
+        <input type="range" id="speed-slider" min="1" max="30" value="8" step="1">
+        <span id="speed-val">8x</span>
+      </div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Power curve</div>
+      <canvas id="mini-chart"></canvas>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">This run</div>
+      <div id="run-stats">—</div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Monte Carlo (50 runs)</div>
+      <div id="mc-stats">—</div>
+    </div>
+
+    <div class="panel-card">
+      <div class="panel-title">Legend</div>
+      <div id="legend">
+        <div class="legend-row"><div class="legend-dot" style="background:#34d399"></div>Normal (TP/TN)</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#f87171"></div>True positive</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#fb923c"></div>Missed fault (FN)</div>
+        <div class="legend-row"><div class="legend-dot" style="background:#fbbf24"></div>False alarm (FP)</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="fault-banner">FAULT DETECTED</div>
+
+  <div id="bottombar">
+    <button id="play-btn">&#9654;</button>
+    <div id="timeline-wrap">
+      <div id="timeline-bg"></div>
+      <canvas id="fault-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></canvas>
+      <div id="timeline-fill"></div>
+      <div id="timeline-cursor"></div>
+    </div>
+    <div id="step-label">Step 0 / 3600</div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const API = 'http://localhost:8000/api';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let allRunsSummary = [];
+let currentRunData = null;
+let currentRunIdx  = 0;
+let currentStep    = 0;
+let isPlaying      = false;
+let playSpeed      = 8;
+let frameAccum     = 0;
+let rotorAngle     = 0;
+let mcStats        = null;
+
+// ── Loading ───────────────────────────────────────────────────────────────────
+function setLoading(pct, msg) {
+  document.getElementById('loading-bar-fill').style.width = pct + '%';
+  document.getElementById('loading-msg').textContent = msg;
+}
+
+async function loadData() {
+  try {
+    setLoading(10, 'Checking server...');
+    await fetch(`${API}/health`);
+
+    setLoading(30, 'Loading run summaries...');
+    const summaryRes = await fetch(`${API}/runs/summary`);
+    allRunsSummary = await summaryRes.json();
+
+    setLoading(60, 'Loading Monte Carlo statistics...');
+    const mcRes = await fetch(`${API}/monte-carlo/stats`);
+    mcStats = await mcRes.json();
+
+    setLoading(80, 'Loading first run...');
+    await loadRun(0);
+
+    setLoading(100, 'Ready');
+    setTimeout(() => {
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('ui').style.display = 'block';
+      buildRunButtons();
+      renderMCStats();
+    }, 300);
+
+  } catch (err) {
+    setLoading(0, `Error: ${err.message}. Is the server running? (python api/server.py)`);
+    console.error(err);
+  }
+}
+
+async function loadRun(idx) {
+  const res  = await fetch(`${API}/runs/${idx}/full`);
+  currentRunData = await res.json();
+  currentRunIdx  = idx;
+  currentStep    = 0;
+  drawFaultOverlay();
+  updateFrame(0);
+  renderRunStats();
+}
+
+// ── UI builders ───────────────────────────────────────────────────────────────
+function buildRunButtons() {
+  const container = document.getElementById('run-controls');
+  container.innerHTML = '';
+  document.getElementById('total-runs').textContent = allRunsSummary.length;
+
+  allRunsSummary.forEach((run, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'run-btn';
+    btn.textContent = i + 1;
+    btn.title = `F1: ${(run.f1 * 100).toFixed(0)}%  Recall: ${(run.recall*100).toFixed(0)}%`;
+
+    const r = Math.round((1 - run.f1) * 100);
+    const g = Math.round(run.f1 * 100);
+    btn.style.background = `rgba(${r}, ${g}, 60, 0.18)`;
+    btn.style.borderColor = `rgba(${r}, ${g}, 60, 0.35)`;
+
+    btn.addEventListener('click', async () => {
+      document.querySelectorAll('.run-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      setLoading(50, `Loading run ${i+1}...`);
+      document.getElementById('loading-screen').style.display = 'flex';
+      await loadRun(i);
+      document.getElementById('loading-screen').style.display = 'none';
+    });
+    container.appendChild(btn);
+  });
+
+  document.querySelectorAll('.run-btn')[0]?.classList.add('active');
+}
+
+function renderRunStats() {
+  if (!currentRunData) return;
+  const s = currentRunData.stats;
+  document.getElementById('run-stats').innerHTML =
+    `Precision: <b>${(s.precision*100).toFixed(1)}%</b><br>` +
+    `Recall: <b>${(s.recall*100).toFixed(1)}%</b><br>` +
+    `F1: <b>${(s.f1*100).toFixed(1)}%</b><br>` +
+    `Fault steps: <b>${s.fault_steps}</b><br>` +
+    `TP: <b style="color:#34d399">${s.tp}</b>  ` +
+    `FP: <b style="color:#fbbf24">${s.fp}</b>  ` +
+    `FN: <b style="color:#fb923c">${s.fn}</b><br>` +
+    `Cost: <b>€${(s.cost/1e6).toFixed(2)}M</b>`;
+}
+
+function renderMCStats() {
+  if (!mcStats) return;
+  const f = (v) => (v * 100).toFixed(1) + '%';
+  const cv = (obj) => `CV=${obj.cv.toFixed(2)}`;
+  document.getElementById('mc-stats').innerHTML =
+    `F1: <b>${f(mcStats.f1.mean)}</b> ± ${f(mcStats.f1.std)} <span style="color:#64748b">${cv(mcStats.f1)}</span><br>` +
+    `Precision: <b>${f(mcStats.precision.mean)}</b><br>` +
+    `Recall: <b>${f(mcStats.recall.mean)}</b><br>` +
+    `PR-AUC: <b>${f(mcStats.pr_auc.mean)}</b><br>` +
+    `Cost: <b>€${(mcStats.cost.mean/1e6).toFixed(2)}M</b>`;
+}
+
+// ── Mini chart ────────────────────────────────────────────────────────────────
+const chartCanvas = document.getElementById('mini-chart');
+const ctx = chartCanvas.getContext('2d');
+chartCanvas.width = 196; chartCanvas.height = 78;
+
+function drawMiniChart(steps, step) {
+  const W = chartCanvas.width, H = chartCanvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const maxP = 5500;
+
+  ctx.strokeStyle = 'rgba(52,211,153,0.22)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  steps.forEach((s, i) => {
+    const x = (i / steps.length) * W;
+    const y = H - (s.actual_power / maxP) * H;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Anomaly score overlay
+  ctx.strokeStyle = 'rgba(251,146,60,0.4)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  steps.forEach((s, i) => {
+    const x = (i / steps.length) * W;
+    const y = H - s.anomaly_score * H;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Current position
+  const cx = (step / steps.length) * W;
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([2, 3]);
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawFaultOverlay() {
+  if (!currentRunData) return;
+  const steps = currentRunData.steps;
+  const oc = document.getElementById('fault-overlay');
+  oc.width = oc.offsetWidth || 600;
+  oc.height = oc.offsetHeight || 28;
+  const octx = oc.getContext('2d');
+  octx.clearRect(0, 0, oc.width, oc.height);
+  const W = oc.width;
+
+  let inFault = false, faultStart = 0;
+  steps.forEach((s, i) => {
+    if (s.is_fault && !inFault) { inFault = true; faultStart = i; }
+    if (!s.is_fault && inFault) {
+      octx.fillStyle = 'rgba(248,113,113,0.2)';
+      octx.fillRect((faultStart/steps.length)*W, 0, ((i-faultStart)/steps.length)*W, oc.height);
+      inFault = false;
+    }
+  });
+}
+
+// ── Frame update ──────────────────────────────────────────────────────────────
+function updateFrame(step) {
+  if (!currentRunData) return;
+  const steps = currentRunData.steps;
+  step = Math.max(0, Math.min(steps.length - 1, step));
+  currentStep = step;
+
+  const d = steps[step];
+
+  document.getElementById('m-wind').textContent   = d.wind_speed.toFixed(1);
+  document.getElementById('m-power').textContent  = (d.actual_power / 1000).toFixed(2) + ' MW';
+  document.getElementById('m-eff').textContent    = d.efficiency_ratio.toFixed(3);
+  document.getElementById('m-score').textContent  = d.anomaly_score.toFixed(3);
+  document.getElementById('bar-wind').style.width  = `${Math.min(100, d.wind_speed / 25 * 100).toFixed(1)}%`;
+  document.getElementById('bar-power').style.width = `${Math.min(100, d.actual_power / 5500 * 100).toFixed(1)}%`;
+  document.getElementById('bar-eff').style.width   = `${Math.min(100, d.efficiency_ratio * 100).toFixed(1)}%`;
+  document.getElementById('bar-score').style.width = `${(d.anomaly_score * 100).toFixed(1)}%`;
+
+  document.getElementById('cur-run').textContent  = currentRunIdx + 1;
+  document.getElementById('cur-step').textContent = step;
+  document.getElementById('step-label').textContent = `Step ${step} / ${steps.length - 1}`;
+
+  const pct = (step / (steps.length - 1)) * 100;
+  document.getElementById('timeline-fill').style.width  = pct.toFixed(2) + '%';
+  document.getElementById('timeline-cursor').style.left = pct.toFixed(2) + '%';
+
+  const banner = document.getElementById('fault-banner');
+  if (d.is_fault) {
+    banner.textContent = `FAULT: ${(d.fault_type || '').replace(/_/g,' ').toUpperCase()}`;
+    banner.classList.add('visible');
+  } else {
+    banner.classList.remove('visible');
+  }
+
+  // 3D ring color
+  if (d.is_fault && d.is_anomaly)       ringMat.color.set(0x34d399);  // TP green
+  else if (d.is_fault && !d.is_anomaly) ringMat.color.set(0xfb923c);  // FN orange
+  else if (!d.is_fault && d.is_anomaly) ringMat.color.set(0xfbbf24);  // FP yellow
+  else                                   ringMat.color.set(0x1e3a5f);  // TN dim
+
+  // Blade tint
+  const eff = d.efficiency_ratio;
+  const bladeColor = eff > 0.9 ? 0xe2e8f0 : eff > 0.7 ? 0xfbbf24 : 0xf87171;
+  blades.forEach(b => b.material.color.set(bladeColor));
+
+  // Wind particles density
+  particleMat.opacity = Math.min(0.6, 0.15 + d.wind_speed / 25 * 0.45);
+
+  // Rotor target RPM
+  rotorGroup.userData.targetRPM = d.wind_speed > 3
+    ? Math.min(12.1, (d.wind_speed - 3) / 8.4 * 12.1) : 0;
+
+  drawMiniChart(steps, step);
+}
+
+// ── Three.js scene ────────────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0f1a);
+scene.fog = new THREE.Fog(0x0a0f1a, 70, 160);
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 500);
+camera.position.set(22, 14, 28);
+camera.lookAt(0, 8, 0);
+
+scene.add(new THREE.AmbientLight(0x1a2744, 2.8));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+sun.position.set(30, 50, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+scene.add(sun);
+scene.add(Object.assign(new THREE.DirectionalLight(0x4488ff, 0.35), { position: { set: (x,y,z) => { scene.children[scene.children.length-1].position.set(x,y,z); } } }));
+const fill = new THREE.DirectionalLight(0x4488ff, 0.35);
+fill.position.set(-20, 10, -10);
+scene.add(fill);
+
+const M = {
+  tower:   new THREE.MeshLambertMaterial({ color: 0x94a3b8 }),
+  nacelle: new THREE.MeshLambertMaterial({ color: 0xcbd5e1 }),
+  hub:     new THREE.MeshLambertMaterial({ color: 0xf1f5f9 }),
+  ground:  new THREE.MeshLambertMaterial({ color: 0x1e293b }),
+};
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), M.ground);
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+scene.add(ground);
+scene.add(new THREE.GridHelper(100, 20, 0x1e3a5f, 0x1e3a5f));
+
+const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.8, 18, 16), M.tower);
+tower.position.set(0, 9, 0); tower.castShadow = true; scene.add(tower);
+
+const nacelle = new THREE.Mesh(new THREE.BoxGeometry(3.5, 1.4, 1.8), M.nacelle);
+nacelle.position.set(0, 18.7, 0); nacelle.castShadow = true; scene.add(nacelle);
+
+const rotorGroup = new THREE.Group();
+rotorGroup.position.set(1.8, 18.7, 0);
+scene.add(rotorGroup);
+rotorGroup.add(new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), M.hub));
+
+const blades = [];
+for (let i = 0; i < 3; i++) {
+  const b = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 8, 0.12),
+    new THREE.MeshLambertMaterial({ color: 0xe2e8f0, side: THREE.DoubleSide })
+  );
+  b.position.y = 4.2;
+  const pivot = new THREE.Group();
+  pivot.rotation.z = (i * Math.PI * 2) / 3;
+  pivot.add(b); rotorGroup.add(pivot); blades.push(b);
+}
+
+const ringGeo = new THREE.TorusGeometry(2.2, 0.08, 8, 32);
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x1e3a5f, transparent: true, opacity: 0.9 });
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.position.set(1.8, 18.7, 0); ring.rotation.y = Math.PI / 2;
+scene.add(ring);
+
+// Wind particles
+const PC = 350;
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(PC * 3);
+for (let i = 0; i < PC; i++) {
+  pPos[i*3]   = (Math.random() - 0.5) * 70;
+  pPos[i*3+1] = Math.random() * 30;
+  pPos[i*3+2] = (Math.random() - 0.5) * 50 - 20;
+}
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+const particleMat = new THREE.PointsMaterial({ color: 0x38bdf8, size: 0.14, transparent: true, opacity: 0.35 });
+scene.add(new THREE.Points(pGeo, particleMat));
+
+// Background turbines
+function addBgTurbine(x, z, s) {
+  const g = new THREE.Group();
+  g.add(Object.assign(new THREE.Mesh(new THREE.CylinderGeometry(0.2*s, 0.4*s, 14*s, 8), M.tower), { position: { x:0, y:7*s, z:0 } }));
+  const t = new THREE.Mesh(new THREE.CylinderGeometry(0.2*s, 0.4*s, 14*s, 8), M.tower);
+  t.position.y = 7*s; g.add(t);
+  const n = new THREE.Mesh(new THREE.BoxGeometry(2*s, 0.8*s, 1*s), M.nacelle);
+  n.position.y = 14*s; g.add(n);
+  const rg = new THREE.Group(); rg.position.set(1.2*s, 14*s, 0);
+  for (let i = 0; i < 3; i++) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.15*s, 5*s, 0.08*s),
+      new THREE.MeshLambertMaterial({ color: 0xe2e8f0 }));
+    b.position.y = 2.5*s;
+    const p = new THREE.Group(); p.rotation.z = i * Math.PI * 2 / 3 + Math.random();
+    p.add(b); rg.add(p);
+  }
+  g.add(rg); g.position.set(x, 0, z); scene.add(g);
+}
+addBgTurbine(-32, -14, 0.7); addBgTurbine(-48, 8, 0.6);
+addBgTurbine(36, -18, 0.65); addBgTurbine(52, 4, 0.55);
+
+// Orbit controls
+let isDragging = false, lastX = 0, lastY = 0;
+let camTheta = Math.atan2(22, 28), camPhi = 0.9, camR = 38;
+function updateCam() {
+  camera.position.set(
+    camR * Math.sin(camPhi) * Math.sin(camTheta),
+    camR * Math.cos(camPhi) + 5,
+    camR * Math.sin(camPhi) * Math.cos(camTheta)
+  );
+  camera.lookAt(0, 8, 0);
+}
+renderer.domElement.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  camTheta -= (e.clientX - lastX) * 0.005;
+  camPhi    = Math.max(0.1, Math.min(1.5, camPhi - (e.clientY - lastY) * 0.005));
+  lastX = e.clientX; lastY = e.clientY; updateCam();
+});
+renderer.domElement.addEventListener('wheel', e => {
+  camR = Math.max(14, Math.min(90, camR + e.deltaY * 0.05)); updateCam();
+});
+
+// Controls
+document.getElementById('play-btn').addEventListener('click', () => {
+  isPlaying = !isPlaying;
+  document.getElementById('play-btn').innerHTML = isPlaying ? '&#9646;&#9646;' : '&#9654;';
+  if (currentStep >= (currentRunData?.steps.length || 0) - 1) currentStep = 0;
+});
+document.getElementById('speed-slider').addEventListener('input', function() {
+  playSpeed = +this.value;
+  document.getElementById('speed-val').textContent = playSpeed + 'x';
+});
+document.getElementById('timeline-wrap').addEventListener('click', e => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  const pct  = (e.clientX - rect.left) / rect.width;
+  updateFrame(Math.round(pct * ((currentRunData?.steps.length || 1) - 1)));
+});
+
+// Animation loop
+let lastTime = 0;
+function animate(time) {
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, (time - lastTime) / 1000);
+  lastTime = time;
+
+  const targetRPM = rotorGroup.userData.targetRPM || 0;
+  rotorGroup.userData.currentRPM = (rotorGroup.userData.currentRPM || 0) * 0.97 + targetRPM * 0.03;
+  rotorAngle += (rotorGroup.userData.currentRPM / 60) * Math.PI * 2 * dt;
+  rotorGroup.rotation.x = rotorAngle;
+
+  const pp = pGeo.attributes.position.array;
+  const wv = (rotorGroup.userData.currentRPM / 12.1) * 0.12;
+  for (let i = 0; i < PC; i++) { pp[i*3] += wv + 0.015; if (pp[i*3] > 45) pp[i*3] = -45; }
+  pGeo.attributes.position.needsUpdate = true;
+
+  const d = currentRunData?.steps[currentStep];
+  if (d?.is_anomaly) {
+    const p = 0.7 + 0.3 * Math.sin(time * 0.006);
+    ringMat.opacity = p;
+    ring.scale.setScalar(1 + 0.04 * Math.sin(time * 0.006));
+  } else {
+    ringMat.opacity = 0.9; ring.scale.setScalar(1);
+  }
+
+  if (isPlaying && currentRunData) {
+    frameAccum += dt * playSpeed;
+    if (frameAccum >= 1) {
+      const skip = Math.floor(frameAccum); frameAccum -= skip;
+      const next = Math.min(currentStep + skip, currentRunData.steps.length - 1);
+      updateFrame(next);
+      if (next >= currentRunData.steps.length - 1) {
+        isPlaying = false;
+        document.getElementById('play-btn').innerHTML = '&#9654;';
+      }
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+updateCam();
+animate(0);
+loadData();
+</script>
+</body>
+</html>

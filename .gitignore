@@ -1,0 +1,15 @@
+# Data folders — large/generated files
+data/raw/
+data/processed/
+
+# Environment & cache
+.venv/
+__pycache__/
+outputs/plots/
+
+# File types
+*.pyc
+*.db
+
+# Dev files
+test.py
