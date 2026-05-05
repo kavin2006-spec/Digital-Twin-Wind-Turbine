@@ -164,21 +164,54 @@ All hyperparameters in `config/turbine_config.yaml`:
 
 ```yaml
 ml:
-  window_size_short: 30 # Short VAE window (seconds)
-  window_size_long: 120 # Long VAE window (seconds)
-  train_after: 200 # Steps before first training
-  train_after_long: 400 # Steps before long window training
-  n_epochs: 50
+  contamination: 0.05
+  random_state: 42
+  window_size: 60
+  window_size_short: 30
+  window_size_long: 120
+  multi_scale_weight: 0.5 # 0=all short, 1=all long
+  slide_every: 10
   latent_dim: 4
-  beta: 0.5 # VAE beta (KL weight in loss)
-  kl_weight: 0.3 # KL contribution to anomaly score
-  n_ensemble: 3 # Models per detector
-  calibration_size: 200 # Windows for threshold calibration
-
+  hidden_size: 64
+  n_epochs: 50
+  train_after: 200
+  epsilon: 0.01
+  max_clean_iterations: 3
+  beta: 0.5
+  kl_weight: 0.3
+  noise_scale: 0.03
+  n_ensemble: 3
+  calibration_size: 200
+  lr: 0.001
+  grad_clip: 1.0
+  train_after_long: 400
+  fault_start_after_step: 600
 anomaly:
-  fault_start_after_step: 600 # Fault injection delay
+  enabled: true
   fault_probability: 0.002
   fault_duration_seconds: 60
+  efficiency_drop_fraction: 0.35
+  fault_start_after_step: 600
+simulation:
+  duration_seconds: 3600
+  sensor_noise_stddev: 0.02
+  timestep_seconds: 1
+  wind_mean_speed_ms: 9.0
+  wind_turbulence_intensity: 0.12
+  vibration_sampling_rate_hz: 100.0
+  vibration_base_noise: 0.05
+  vibration_seed: 77
+  ambient_temp_c: 15.0
+turbine:
+  air_density_kg_m3: 1.225
+  cut_in_speed_ms: 3.0
+  cut_out_speed_ms: 25.0
+  hub_height_m: 90.0
+  name: NREL 5MW Reference Turbine
+  power_coefficient_cp: 0.45
+  rated_power_kw: 5000.0
+  rated_speed_ms: 11.4
+  rotor_diameter_m: 126.0
 ```
 
 ---
@@ -236,7 +269,7 @@ Use anomaly score trends to predict remaining useful life and schedule maintenan
 | LSTM-AE (SCADA)                         | LSTM Autoencoder                         | ~0.60 | Real SCADA      |
 | Isolation Forest                        | Statistical baseline                     | 0.238 | Simulated       |
 
-Our approach is fully unsupervised (no fault labels used during training), making direct comparison with supervised methods unfair. Within the unsupervised category our results are competitive.
+The approach is fully unsupervised (no fault labels used during training), making direct comparison with supervised methods unfair. Within the unsupervised category our results are competitive.
 
 ---
 
